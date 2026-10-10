@@ -2810,5 +2810,91 @@ run();onScroll();
 })();
 
 </script>
+
+<style id="gg-motion-v2">
+/* Golden Gallery motion v2: smoother, staggered, still light on mobile */
+html{scroll-behavior:smooth}
+#view{animation:gg2View .5s cubic-bezier(.22,.8,.24,1) both}
+@keyframes gg2View{from{opacity:0;transform:translateY(14px);filter:blur(3px)}to{opacity:1;transform:none;filter:none}}
+.site-header .header-inner{transition:box-shadow .35s ease,background .35s ease,transform .35s ease}
+.site-header.gg-scrolled .header-inner{box-shadow:0 14px 38px rgba(43,36,32,.14),0 2px 8px rgba(184,134,59,.12)}
+.gg2-pre{opacity:0;transform:translateY(34px) scale(.965);filter:blur(2px)}
+.gg2-in{animation:gg2Up .8s cubic-bezier(.18,.84,.22,1) var(--gd2,0ms) both}
+@keyframes gg2Up{from{opacity:0;transform:translateY(34px) scale(.965);filter:blur(2px)}to{opacity:1;transform:none;filter:none}}
+.product-card{transition:transform .45s cubic-bezier(.18,.84,.22,1),box-shadow .45s cubic-bezier(.18,.84,.22,1)}
+.product-card:hover{transform:translateY(-8px)}
+.product-card:active{transform:translateY(-2px) scale(.985)}
+.product-card .product-media{overflow:hidden}
+.product-card .product-media img{transition:transform .8s cubic-bezier(.18,.84,.22,1),opacity .5s ease,filter .5s ease}
+.product-card:hover .product-media img{transform:scale(1.075) rotate(.4deg);filter:saturate(1.06)}
+.btn{transition:transform .22s cubic-bezier(.34,1.56,.64,1),box-shadow .3s ease,background .25s ease,color .25s ease}
+.btn:active{transform:scale(.965)}
+.main-nav a,.tabbar a,.chip{transition:transform .25s cubic-bezier(.34,1.56,.64,1),color .25s ease,background .25s ease,border-color .25s ease}
+.main-nav a:active,.tabbar a:active{transform:scale(.94)}
+.hero{isolation:isolate}
+.hero::after{content:"";position:absolute;inset:-20%;z-index:-1;background:radial-gradient(circle at 22% 18%,rgba(255,255,255,.42),transparent 32%),radial-gradient(circle at 82% 76%,rgba(184,134,59,.18),transparent 38%);animation:gg2HeroGlow 9s ease-in-out infinite alternate;pointer-events:none}
+@keyframes gg2HeroGlow{from{transform:translate3d(-1.5%,-1%,0) scale(1)}to{transform:translate3d(1.5%,1.5%,0) scale(1.045)}}
+.modal-overlay{animation:gg2Fade .28s ease both}
+.modal-box{animation:gg2Modal .48s cubic-bezier(.18,.84,.22,1) both}
+@keyframes gg2Fade{from{opacity:0}to{opacity:1}}
+@keyframes gg2Modal{from{opacity:0;transform:translateY(22px) scale(.965)}to{opacity:1;transform:none}}
+.toast{animation:gg2Toast .45s cubic-bezier(.18,.84,.22,1) both}
+@keyframes gg2Toast{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:none}}
+.code-box{transition:transform .25s cubic-bezier(.34,1.56,.64,1),border-color .2s ease,box-shadow .2s ease,background .2s ease}
+.code-box.gg-filled{background:#FFF8E9;border-color:var(--gold);animation:gg2CodePop .32s cubic-bezier(.34,1.56,.64,1)}
+@keyframes gg2CodePop{0%{transform:scale(.92)}55%{transform:scale(1.08)}100%{transform:scale(1)}}
+.skeleton-box,.skeleton-line{position:relative;overflow:hidden}
+.input:focus,.code-box:focus{transform:translateY(-1px)}
+.gg2-tilt{transform-style:preserve-3d;will-change:transform}
+@media (hover:none),(max-width:760px){.product-card:hover{transform:none}.product-card .product-media img{transition-duration:.45s}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}#view,.gg2-in,.modal-box,.toast,.hero::after{animation:none!important}.gg2-pre{opacity:1!important;transform:none!important;filter:none!important}}
+</style>
+
+<script id="gg-motion-v2-js">
+(function(){
+  var d=document, v=d.getElementById('view'); if(!v) return;
+  var reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduced) return;
+  var io=('IntersectionObserver' in window)?new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(!e.isIntersecting) return;
+      var el=e.target; io.unobserve(el); el.classList.add('gg2-in');
+      el.addEventListener('animationend',function done(ev){ if(ev.target!==el) return; el.classList.remove('gg2-pre','gg2-in'); el.removeEventListener('animationend',done); });
+    });
+  },{threshold:.1,rootMargin:'0px 0px -6% 0px'}):null;
+  function prepare(){
+    if(!io) return;
+    var groups={};
+    v.querySelectorAll('.product-card,.cart-item,.stat-card,.summary-card,.skeleton-card').forEach(function(el){
+      if(el.dataset.gg2m) return; el.dataset.gg2m='1';
+      var parent=el.parentElement, key=parent?(parent.id||parent.className||'g'):'g';
+      groups[key]=(groups[key]||0)+1;
+      el.style.setProperty('--gd2',((groups[key]-1)%8)*75+'ms');
+      el.classList.add('gg2-pre'); io.observe(el);
+    });
+    v.querySelectorAll('.code-box').forEach(function(box){
+      if(box.dataset.gg2c) return; box.dataset.gg2c='1';
+      box.addEventListener('input',function(){ box.classList.toggle('gg-filled',!!box.value); });
+    });
+    var hero=v.querySelector('.hero');
+    if(hero && !hero.dataset.gg2h){
+      hero.dataset.gg2h='1';
+      if(matchMedia('(hover:hover) and (pointer:fine)').matches){
+        hero.addEventListener('pointermove',function(e){
+          var r=hero.getBoundingClientRect(), x=(e.clientX-r.left)/Math.max(1,r.width)-.5, y=(e.clientY-r.top)/Math.max(1,r.height)-.5;
+          hero.style.setProperty('--gg-mx',x.toFixed(3)); hero.style.setProperty('--gg-my',y.toFixed(3));
+          var spark=hero.querySelectorAll('.hero-spark');
+          spark.forEach(function(s,i){ s.style.translate=(x*(8+i*4))+'px '+(y*(8+i*4))+'px'; });
+        },{passive:true});
+        hero.addEventListener('pointerleave',function(){ hero.querySelectorAll('.hero-spark').forEach(function(s){ s.style.translate=''; }); });
+      }
+    }
+  }
+  var queued=false;
+  new MutationObserver(function(){ if(queued) return; queued=true; requestAnimationFrame(function(){ queued=false; prepare(); }); }).observe(v,{childList:true,subtree:true});
+  setTimeout(function(){ v.querySelectorAll('.gg2-pre:not(.gg2-in)').forEach(function(el){ el.classList.add('gg2-in'); }); },4200);
+  prepare();
+})();
+</script>
 </body>
 </html>
