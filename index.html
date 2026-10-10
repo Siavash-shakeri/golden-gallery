@@ -1078,6 +1078,8 @@ const Api = {
   async signup(data){
     if(CONFIG.MOCK){
       const db=loadDB();
+      const lim={firstName:80,lastName:80,phone:20,nationalId:20,email:120,password:128};
+      for(const k in lim){ if(String(data[k]||'').length>lim[k]) throw new Error('یکی از ورودی‌ها بیش از حد طولانی است'); }
       if(db.users.some(u=>u.phone===data.phone)) throw new Error('این شماره قبلاً ثبت‌نام کرده است');
       const passwordHash = await ggHashPassword(data.password, data.phone);
       const u={...data, passwordHash, id:uid('u_'), verified:false, verifyCode:genCode(), verifyExpires:Date.now()+600000, verifyAttempts:0};
@@ -1390,7 +1392,7 @@ async function viewProducts(){
 async function viewProductDetail(id){
   $('#view').innerHTML = `<div class="section">${skeletonCards(1)}</div>`;
   const p = await Api.getProduct(id);
-  if(!p){ $('#view').innerHTML = `<div class="section">${emptyState()}</div>`; return; }
+  if(!p){ $('#view').innerHTML = `<div class="section"><div class="empty-state" style="grid-column:1/-1;"><div class="glyph">◯</div><div>این محصول پیدا نشد</div><div class="center-note">شاید حذف شده یا آدرس اشتباه است.</div><p style="margin-top:14px;"><a class="btn btn-primary" href="#products">دیدن محصولات</a></p></div></div>`; return; }
   const images = (p.images && p.images.length) ? p.images : (p.image ? [p.image] : []);
   const mainImg = images[0] ? `<img src="${escapeHtml(images[0])}" id="mainDetailImg" alt="${escapeHtml(p.name)}">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--placeholder);">بدون تصویر</div>`;
   const thumbsHtml = images.length>1 ? `
@@ -1533,7 +1535,7 @@ function renderLoginForm(){
     <form id="loginForm">
       <div class="field">
         <label>شماره موبایل</label>
-        <input class="input" name="phone" placeholder="09xxxxxxxxx" required>
+        <input class="input" name="phone" maxlength="20" placeholder="09xxxxxxxxx" required>
       </div>
       <div class="field">
         <label>رمز عبور</label>
@@ -1564,13 +1566,13 @@ function renderLoginForm(){
 function renderSignupForm(){
   $('#authFormWrap').innerHTML = `
     <form id="signupForm">
-      <div class="field"><label>نام <span class="req">*</span></label><input class="input" name="firstName" required></div>
-      <div class="field"><label>نام خانوادگی <span class="req">*</span></label><input class="input" name="lastName" required></div>
-      <div class="field"><label>شماره موبایل <span class="req">*</span></label><input class="input" name="phone" placeholder="09xxxxxxxxx" required></div>
+      <div class="field"><label>نام <span class="req">*</span></label><input class="input" name="firstName" maxlength="80" required></div>
+      <div class="field"><label>نام خانوادگی <span class="req">*</span></label><input class="input" name="lastName" maxlength="80" required></div>
+      <div class="field"><label>شماره موبایل <span class="req">*</span></label><input class="input" name="phone" maxlength="20" placeholder="09xxxxxxxxx" required></div>
       <div class="field"><label>رمز عبور <span class="req">*</span></label><input class="input" type="password" name="password" required></div>
       <div class="field"><label>تکرار رمز عبور <span class="req">*</span></label><input class="input" type="password" name="password2" required></div>
-      <div class="field"><label>کد ملی <span class="req">*</span></label><input class="input" name="nationalId" required></div>
-      <div class="field"><label>ایمیل</label><input class="input" type="email" name="email"></div>
+      <div class="field"><label>کد ملی <span class="req">*</span></label><input class="input" name="nationalId" maxlength="20" required></div>
+      <div class="field"><label>ایمیل</label><input class="input" type="email" name="email" maxlength="120"></div>
       <button class="btn btn-primary btn-block" type="submit">ایجاد حساب</button>
       <div class="form-hint">اطلاعات شما فقط برای ثبت و پیگیری سفارش استفاده می‌شود.</div>
     </form>
@@ -1598,7 +1600,7 @@ function viewVerify(){
           <h1 style="font-family:var(--font-display);font-size:24px;">تایید شماره موبایل</h1>
           <p style="color:var(--warm-gray);font-size:14px;">شماره موبایل خود را وارد کنید</p>
           <form id="phoneLookupForm" style="max-width:280px;margin:var(--sp-5) auto 0;">
-            <input class="input" name="phone" placeholder="09xxxxxxxxx" required>
+            <input class="input" name="phone" maxlength="20" placeholder="09xxxxxxxxx" required>
             <button class="btn btn-primary btn-block" style="margin-top:var(--sp-3);" type="submit">ادامه</button>
           </form>
         </div>
