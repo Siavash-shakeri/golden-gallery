@@ -911,6 +911,7 @@ function compressImage(file, maxDim=900, quality=0.72){
 }
 const escapeHtml = s => (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeHex = h => /^#[0-9a-fA-F]{3,8}$/.test(String(h||'')) ? String(h) : '#cccccc';
+const safeUrl = u => { const s=String(u||'').trim(); if(!s) return '#'; if(s.startsWith('#')||s.startsWith('/')) return escapeHtml(s); try{ const x=new URL(s, location.href); return ['http:','https:','tel:','mailto:'].includes(x.protocol) ? escapeHtml(s) : '#'; }catch(e){ return '#'; } };
 
 function toast(msg, icon='✓'){
   const c = $('#toast-container');
@@ -1054,10 +1055,10 @@ const Api = {
     if(CONFIG.MOCK){
       const db=loadDB();
       const clean = items.map(raw=>({
-        id: raw.id || uid('p_'),
-        name: raw.name||'محصول بدون نام', category: raw.category||'', price: Number(raw.price)||0,
+        id: String(raw.id||'').replace(/[^a-zA-Z0-9_-]/g,'') || uid('p_'),
+        name: String(raw.name||'محصول بدون نام'), category: String(raw.category||''), price: Number(raw.price)||0,
         stock: Number(raw.stock)||0, available: raw.available!==false,
-        description: raw.description||'', images: Array.isArray(raw.images)? raw.images : (raw.image?[raw.image]:[]),
+        description: String(raw.description||''), images: (Array.isArray(raw.images)? raw.images : (raw.image?[raw.image]:[])).map(x=>String(x)),
         sku: raw.sku||'', material: raw.material||'', dimensions: raw.dimensions||'', weight: raw.weight||'',
         discountPrice: raw.discountPrice||null, featured: !!raw.featured,
         tags: Array.isArray(raw.tags)?raw.tags:[], colors: Array.isArray(raw.colors)?raw.colors:[],
@@ -1262,8 +1263,8 @@ async function viewHome(){
         <input class="input" id="heroSearch" placeholder="دنبال چی می‌گردی؟ مثلاً «ظروف سرو»">
       </div>
       <div class="hero-ctas">
-        <a href="${escapeHtml(hc.ctaPrimaryLink||'#products')}" class="btn btn-primary">${escapeHtml(hc.ctaPrimaryText)} →</a>
-        <a href="${escapeHtml(hc.ctaSecondaryLink||'#products')}" class="btn btn-secondary">${escapeHtml(hc.ctaSecondaryText)}</a>
+        <a href="${safeUrl(hc.ctaPrimaryLink||'#products')}" class="btn btn-primary">${escapeHtml(hc.ctaPrimaryText)} →</a>
+        <a href="${safeUrl(hc.ctaSecondaryLink||'#products')}" class="btn btn-secondary">${escapeHtml(hc.ctaSecondaryText)}</a>
       </div>
     </section>
     <section class="section">
@@ -2630,7 +2631,7 @@ function renderFooterSocial(settings){
   ];
   $('#footerSocial').innerHTML = `
     <p class="footer-tel">${c.phone ? `📞 <a href="tel:${escapeHtml(c.phone)}">${escapeHtml(c.phone)}</a>` : '📞 شماره تماس هنوز ثبت نشده'}</p>
-    ${links.map(l => `<p class="footer-tel">${l.val ? `<a href="${escapeHtml(l.val)}" target="_blank" rel="noopener">${l.label}</a>` : `<span style="opacity:.55;">${l.label} — هنوز ثبت نشده</span>`}</p>`).join('')}
+    ${links.map(l => `<p class="footer-tel">${l.val ? `<a href="${safeUrl(l.val)}" target="_blank" rel="noopener">${l.label}</a>` : `<span style="opacity:.55;">${l.label} — هنوز ثبت نشده</span>`}</p>`).join('')}
   `;
 }
 async function initFooter(){
@@ -2713,7 +2714,7 @@ async function viewAbout(){
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           ${['telegram','eitaa','instagram'].map(k=>{
             const label = k==='telegram'?'✈️ تلگرام':k==='eitaa'?'🟢 ایتا':'📷 اینستاگرام';
-            return s[k] ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(s[k])}" target="_blank" rel="noopener">${label}</a>` : `<span class="btn btn-ghost btn-sm" style="opacity:.5;">${label} (ثبت نشده)</span>`;
+            return s[k] ? `<a class="btn btn-secondary btn-sm" href="${safeUrl(s[k])}" target="_blank" rel="noopener">${label}</a>` : `<span class="btn btn-ghost btn-sm" style="opacity:.5;">${label} (ثبت نشده)</span>`;
           }).join('')}
         </div>
       </div>
@@ -2939,6 +2940,85 @@ html{scroll-behavior:smooth}
   new MutationObserver(function(){ if(queued) return; queued=true; requestAnimationFrame(function(){ queued=false; prepare(); }); }).observe(v,{childList:true,subtree:true});
   setTimeout(function(){ v.querySelectorAll('.gg2-pre:not(.gg2-in)').forEach(function(el){ el.classList.add('gg2-in'); }); },4200);
   prepare();
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script id="gg-email-verify">
+(function(){
+  var URL_='https://eepqeabmxacjkwqjtcvp.supabase.co';
+  var KEY_='sb_publishable_00QTsUtlFAhY-xbefl6Oog_4izNTQ7j';
+  var SITE_='https://siavash-shakeri.github.io/golden-gallery/';
+  var client=null;
+  try{ if(window.supabase && window.supabase.createClient) client=window.supabase.createClient(URL_, KEY_); }catch(e){ client=null; }
+  function dbUserByEmail(email){
+    try{
+      var db=loadDB(); if(!db||!db.users) return null;
+      var em=String(email||'').toLowerCase();
+      for(var i=0;i<db.users.length;i++){ if(String(db.users[i].email||'').toLowerCase()===em) return {db:db,user:db.users[i]}; }
+    }catch(e){}
+    return null;
+  }
+  function markVerified(email){
+    var hit=dbUserByEmail(email); if(!hit) return false;
+    hit.user.verified=true; hit.user.verifyCode=''; hit.user.verifyAttempts=0; hit.user.verifyExpires=0;
+    try{ saveDB(hit.db); }catch(e){}
+    try{
+      var pub=(typeof ggPublicUser==='function') ? ggPublicUser(hit.user) : hit.user;
+      State.customer=pub; localStorage.setItem('gg_customer', JSON.stringify(pub)); if(typeof renderAccountPanel==='function') renderAccountPanel();
+    }catch(e){}
+    return true;
+  }
+  async function checkSession(){
+    if(!client) return;
+    try{
+      var res=await client.auth.getSession();
+      var s=res && res.data ? res.data.session : null;
+      if(s && s.user && s.user.email){
+        if(markVerified(s.user.email)){
+          try{ toast('ایمیل شما تایید شد ✓'); }catch(e){}
+          if(!State.pendingPhone && location.hash.indexOf('verify')===-1){ /* stay where user is */ }
+        }
+      }
+    }catch(e){}
+  }
+  async function sendLink(email, btn){
+    if(!client){ try{ toast('سرویس ایمیل الان در دسترس نیست','⚠'); }catch(e){} return; }
+    if(btn){ btn.disabled=true; btn.textContent='در حال ارسال...'; }
+    try{
+      var r=await client.auth.signInWithOtp({ email: email, options:{ shouldCreateUser:true, emailRedirectTo: SITE_ } });
+      if(r && r.error) throw r.error;
+      try{ toast('لینک تایید به ایمیلت فرستاده شد؛ روی لینک داخل ایمیل بزن 📧'); }catch(e){}
+      if(btn) btn.textContent='لینک تایید فرستاده شد ✓';
+    }catch(err){
+      if(btn){ btn.disabled=false; btn.textContent='ارسال لینک تایید به ایمیل'; }
+      try{ toast('ارسال ایمیل نشد؛ چند دقیقه دیگه دوباره بزن','⚠'); }catch(e){}
+    }
+  }
+  // Wrap viewVerify to add email option without touching the original phone-code flow
+  if(typeof viewVerify==='function'){
+    var orig=viewVerify;
+    window.viewVerify=function(){
+      var r=orig.apply(this, arguments);
+      try{
+        if(!State.pendingPhone) return r;
+        var db=loadDB(); var u=(db.users||[]).find(function(x){return x.phone===State.pendingPhone;});
+        var wrap=document.querySelector('.verify-wrap');
+        if(u && u.email && !u.verified && wrap && !document.getElementById('ggEmailBox')){
+          var box=document.createElement('div');
+          box.id='ggEmailBox'; box.className='verify-hint-box';
+          box.innerHTML='📧 یا با ایمیل تایید کن: یه لینک تایید می‌فرستیم به <b style="direction:ltr;display:inline-block;">'+escapeHtml(u.email)+'</b><br><button class="btn btn-secondary btn-block" id="ggEmailSend" style="margin-top:10px;" type="button">ارسال لینک تایید به ایمیل</button>';
+          var hint=wrap.querySelector('.verify-hint-box');
+          if(hint) hint.before(box); else wrap.appendChild(box);
+          document.getElementById('ggEmailSend').addEventListener('click', function(){ sendLink(u.email, this); });
+        }
+      }catch(e){}
+      checkSession();
+      return r;
+    };
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(checkSession, 600); });
+  else setTimeout(checkSession, 600);
 })();
 </script>
 </body>
