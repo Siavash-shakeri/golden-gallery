@@ -1022,6 +1022,53 @@ async function ggVerifyPassword(password, salt, stored){
   if(String(stored).indexOf('pbkdf2$')===0) return (await ggHashPassword(password, salt))===stored;
   return (await ggLegacyHash(password, salt))===stored;
 }
+/* ---- Admin username encryption (AES-GCM, PBKDF2 120k) ---- */
+function ggNormUser(u){ return String(u||'').trim().toLowerCase(); }
+async function ggSha256Hex(s){
+  try{
+    const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s||'')));
+    return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
+  }catch(e){ return null; }
+}
+function ggConstEq(a,b){
+  a=String(a||''); b=String(b||'');
+  if(a.length!==b.length) return false;
+  let d=0; for(let i=0;i<a.length;i++) d|=a.charCodeAt(i)^b.charCodeAt(i);
+  return d===0;
+}
+function ggB64e(bytes){ return btoa(String.fromCharCode.apply(null, bytes)); }
+function ggB64d(b64){ return Uint8Array.from(atob(String(b64||'')), c=>c.charCodeAt(0)); }
+async function ggDeriveAdminKey(password, saltB64){
+  const enc = new TextEncoder();
+  const km = await crypto.subtle.importKey('raw', enc.encode(String(password||'')), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {name:'PBKDF2', salt: enc.encode('gg-adm-v1:'+String(saltB64||'')), iterations:120000, hash:'SHA-256'},
+    km, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']
+  );
+}
+async function ggEncryptAdmin(username, password){
+  const display = String(username||'').trim();
+  const usernameHash = await ggSha256Hex('gg-user:'+ggNormUser(display));
+  const saltB = crypto.getRandomValues(new Uint8Array(16));
+  const ivB = crypto.getRandomValues(new Uint8Array(12));
+  const saltB64 = ggB64e(saltB), ivB64 = ggB64e(ivB);
+  const key = await ggDeriveAdminKey(password, saltB64);
+  const ct = await crypto.subtle.encrypt({name:'AES-GCM', iv:ivB}, key, new TextEncoder().encode(JSON.stringify({username:display})));
+  return {usernameHash:usernameHash, salt:saltB64, iv:ivB64, data:ggB64e(new Uint8Array(ct)), encV:1};
+}
+async function ggDecryptAdmin(a, password){
+  try{
+    if(!a || !a.usernameHash || !a.salt || !a.iv || !a.data) return null;
+    const key = await ggDeriveAdminKey(password, a.salt);
+    const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:ggB64d(a.iv)}, key, ggB64d(a.data));
+    const p = JSON.parse(new TextDecoder().decode(pt));
+    return (p && p.username) ? String(p.username) : null;
+  }catch(e){ return null; }
+}
+async function ggUpgradeAdmin(a, password){
+  const enc = await ggEncryptAdmin(a.username, password);
+  return {usernameHash:enc.usernameHash, salt:enc.salt, iv:enc.iv, data:enc.data, encV:1};
+}
 function ggGuardKey(scope, id){ return 'gg_guard_' + scope + '_' + String(id||'').trim().toLowerCase(); }
 function ggGuardCheck(scope, id){
   try{
@@ -1148,10 +1195,23 @@ const Api = {
       ggGuardCheck('admin', username);
       const db=loadDB();
       let ok=false;
-      for(const a of (db.settings.admins||[])){
-        if(a.username!==username) continue;
-        if(a.passwordHash && await ggVerifyPassword(password, username, a.passwordHash)){ ok=true; if(String(a.passwordHash).indexOf('pbkdf2$')!==0) a.passwordHash = await ggHashPassword(password, username); break; }
-        if(a.password && a.password===password){ a.passwordHash = await ggHashPassword(password, username); delete a.password; ok=true; break; }
+      const normInput = ggNormUser(username);
+      const inputHash = await ggSha256Hex('gg-user:'+normInput);
+      const admins = db.settings.admins||[];
+      for(let idx=0; idx<admins.length; idx++){
+        const a = admins[idx];
+        if(a && a.usernameHash){
+          if(!ggConstEq(a.usernameHash, inputHash)) continue;
+          const dec = await ggDecryptAdmin(a, password);
+          if(dec && ggConstEq(ggNormUser(dec), normInput)){ ok=true; break; }
+          continue;
+        }
+        if(a && a.username!==undefined){
+          if(a.username!==username && ggNormUser(a.username)!==normInput) continue;
+          let legacyOk=false;
+          if(a.passwordHash && await ggVerifyPassword(password, a.username, a.passwordHash)) legacyOk=true;
+          if(legacyOk){ admins[idx]=await ggUpgradeAdmin(a, password); ok=true; break; }
+        }
       }
       if(ok){ ggGuardReset('admin', username); saveDB(db); return {ok:true}; }
       ggGuardFail('admin', username);
@@ -1170,7 +1230,7 @@ const Api = {
     const r = await fetch(`${CONFIG.API_BASE}/settings`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch)}); return r.json();
   },
   async addAdmin(username, password){
-    if(CONFIG.MOCK){ const db=loadDB(); db.settings.admins.push({username, passwordHash: await ggHashPassword(password, username)}); saveDB(db); return db.settings.admins; }
+    if(CONFIG.MOCK){ const db=loadDB(); db.settings.admins.push(await ggEncryptAdmin(username, password)); saveDB(db); return db.settings.admins; }
     const r = await fetch(`${CONFIG.API_BASE}/admin/add`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,password})}); return r.json();
   },
   async getOrdersByPhone(phone){
@@ -1783,7 +1843,7 @@ function viewAdminLogin(){
         if(password !== String(fd.get('password2')||'')){ toast('تکرار رمز عبور یکی نیست', '⚠'); return; }
         const db = loadDB();
         if(db.settings.admins && db.settings.admins.length){ toast('مدیر قبلاً ساخته شده است', '⚠'); return; }
-        db.settings.admins = [{username, passwordHash: await ggHashPassword(password, username)}];
+        db.settings.admins = [await ggEncryptAdmin(username, password)];
         saveDB(db);
         State.isAdmin = true;
         sessionStorage.setItem('gg_admin','1');
@@ -2160,17 +2220,29 @@ async function renderAdminsList(){
   const settings = await Api.getSettings();
   $('#adminsList').innerHTML = settings.admins.map((a,i) => `
     <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--beige);">
-      <span style="flex:1;font-weight:600;font-size:13px;">${escapeHtml(a.username)}</span>
+      <span style="flex:1;font-weight:600;font-size:13px;">${escapeHtml(a.usernameHash ? ('مدیر '+(i+1)) : a.username)}</span>
       <button class="link-btn" onclick="editAdminPassword(${i})">تغییر رمز</button>
       ${settings.admins.length>1 ? `<button class="link-btn danger" onclick="removeAdmin(${i})">حذف</button>` : ''}
     </div>
   `).join('');
 }
 async function editAdminPassword(i){
-  const newPass = prompt('رمز عبور جدید برای این ادمین را وارد کن:');
-  if(!newPass) return;
   const settings = await Api.getSettings();
-  settings.admins[i].passwordHash = await ggHashPassword(newPass, settings.admins[i].username); delete settings.admins[i].password;
+  const a = settings.admins[i];
+  if(!a) return;
+  if(a.usernameHash){
+    const curPass = prompt('رمز عبور فعلی این ادمین را وارد کن:');
+    if(!curPass) return;
+    const dec = await ggDecryptAdmin(a, curPass);
+    if(!dec){ toast('رمز فعلی اشتباه است', '⚠'); return; }
+    const newPass = prompt('رمز عبور جدید را وارد کن:');
+    if(!newPass) return;
+    settings.admins[i] = await ggEncryptAdmin(dec, newPass);
+  }else{
+    const newPass = prompt('رمز عبور جدید برای این ادمین را وارد کن:');
+    if(!newPass) return;
+    settings.admins[i] = await ggEncryptAdmin(a.username, newPass);
+  }
   await Api.updateSettings({admins: settings.admins});
   toast('رمز عبور تغییر کرد'); renderAdminsList();
 }
